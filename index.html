@@ -92,7 +92,7 @@
   <main class="card">
     <div class="header">
       <h1>归期知识问卷</h1>
-      <p>规则：共 10 题，答错即结束；第1题为问答题，第6题为多选题，其余为单选题。可重复答题。</p>
+      <p>规则：共 10 题，答错即结束；第1题为问答题，第6题为多选题，其余为单选题。</p>
     </div>
 
     <div class="content" id="quizView">
@@ -107,9 +107,6 @@
         <h2>答题结束</h2>
         <p id="failText"></p>
       </div>
-      <div style="margin-top: 14px;">
-        <button id="restartFromFail" type="button">重新开始</button>
-      </div>
     </div>
 
     <div class="content hidden" id="successView">
@@ -118,13 +115,12 @@
         <p>请扫码加入群聊：</p>
         <img class="qr" src="assets/group-qr.png" alt="群聊二维码" />
       </div>
-      <div style="margin-top: 14px;">
-        <button id="restartFromSuccess" type="button">再答一次</button>
-      </div>
     </div>
   </main>
 
   <script>
+    const STORAGE_KEY = "guiqi_quiz_session_locked_v1";
+
     const questions = [
       {
         type: "text",
@@ -135,19 +131,19 @@
       {
         type: "single",
         title: "2. 归期的生日是？",
-        options: ["2005年3月23日", "2005年3月22日", "2005年2月23日", "2004年3月23日"],
+        options: ["2005年3月22日", "2005年2月23日", "2005年3月23日", "2004年3月23日"],
         correct: "2005年3月23日"
       },
       {
         type: "single",
         title: "3. 归期登上 KPL 赛场的日子是？",
-        options: ["2023年4月2日", "2023年4月3日", "2023年3月2日", "2022年4月2日"],
+        options: ["2023年4月3日", "2023年4月2日", "2023年3月2日", "2022年4月2日"],
         correct: "2023年4月2日"
       },
       {
         type: "single",
         title: "4. 归期的本命英雄是？",
-        options: ["影", "曜", "镜", "澜"],
+        options: ["曜", "镜", "澜", "影"],
         correct: "影"
       },
       {
@@ -159,31 +155,31 @@
       {
         type: "multi",
         title: "6. 归期不爱吃的蔬菜是？（多选题）",
-        options: ["蘑菇", "茄子", "火龙果"],
+        options: ["火龙果", "茄子", "蘑菇"],
         correct: ["蘑菇", "茄子"]
       },
       {
         type: "single",
         title: "7. 归期登场 KPL 后的第一个冠军是哪一年的什么比赛？",
-        options: ["2023年王者荣耀挑战者杯", "2023年KPL春季赛", "2024年王者荣耀挑战者杯", "2022年世界冠军杯"],
+        options: ["2023年KPL春季赛", "2023年王者荣耀挑战者杯", "2024年王者荣耀挑战者杯", "2022年世界冠军杯"],
         correct: "2023年王者荣耀挑战者杯"
       },
       {
         type: "single",
         title: "8. 归期登场 KPL 后的第二个冠军是哪一年的什么比赛？",
-        options: ["2024年KPL春季赛", "2024年KPL夏季赛", "2023年KPL春季赛", "2024年王者荣耀挑战者杯"],
+        options: ["2024年KPL夏季赛", "2023年KPL春季赛", "2024年KPL春季赛", "2024年王者荣耀挑战者杯"],
         correct: "2024年KPL春季赛"
       },
       {
         type: "single",
         title: "9. 归期的直播间房间号是？",
-        options: ["286723", "286732", "268723", "286233"],
+        options: ["286732", "268723", "286233", "286723"],
         correct: "286723"
       },
       {
         type: "single",
         title: "10. 归期在 KPL 赛场的五杀英雄是？",
-        options: ["关羽", "马超", "曜", "澜"],
+        options: ["马超", "关羽", "曜", "澜"],
         correct: "关羽"
       }
     ];
@@ -193,7 +189,30 @@
       status: "in_progress", // in_progress | failed | passed
       failedAt: null
     };
-    let state = { ...defaultState };
+
+    function readState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return { ...defaultState };
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") return { ...defaultState };
+        if (!["in_progress", "failed", "passed"].includes(parsed.status)) return { ...defaultState };
+        if (typeof parsed.index !== "number") return { ...defaultState };
+        return {
+          ...defaultState,
+          ...parsed,
+          index: Math.max(0, Math.min(parsed.index, questions.length))
+        };
+      } catch {
+        return { ...defaultState };
+      }
+    }
+
+    function writeState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    let state = readState();
 
     const quizView = document.getElementById("quizView");
     const failView = document.getElementById("failView");
@@ -203,8 +222,6 @@
     const optionForm = document.getElementById("optionForm");
     const submitBtn = document.getElementById("submitBtn");
     const failText = document.getElementById("failText");
-    const restartFromFail = document.getElementById("restartFromFail");
-    const restartFromSuccess = document.getElementById("restartFromSuccess");
 
     function showOnly(view) {
       [quizView, failView, successView].forEach(v => v.classList.add("hidden"));
@@ -309,6 +326,7 @@
 
       if (state.index >= questions.length) {
         state.status = "passed";
+        writeState();
         showOnly(successView);
         return;
       }
@@ -330,6 +348,7 @@
       if (!isCorrectAnswer(current, answer)) {
         state.status = "failed";
         state.failedAt = state.index;
+        writeState();
         renderByState();
         return;
       }
@@ -338,16 +357,9 @@
       if (state.index >= questions.length) {
         state.status = "passed";
       }
+      writeState();
       renderByState();
     });
-
-    function restartQuiz() {
-      state = { ...defaultState };
-      renderByState();
-    }
-
-    restartFromFail.addEventListener("click", restartQuiz);
-    restartFromSuccess.addEventListener("click", restartQuiz);
 
     renderByState();
   </script>
