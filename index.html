@@ -10,7 +10,7 @@
       --card: #ffffff;
       --text: #1f2937;
       --muted: #6b7280;
-      --primary: #0f766e;
+      --primary: rgb(65, 143, 222);
       --danger: #b91c1c;
       --ok: #166534;
       --border: #e5e7eb;
@@ -31,13 +31,13 @@
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 16px;
-      box-shadow: 0 12px 40px rgba(15, 118, 110, 0.12);
+      box-shadow: 0 12px 40px rgba(65, 143, 222, 0.2);
       overflow: hidden;
     }
     .header {
       padding: 20px 24px;
       border-bottom: 1px solid var(--border);
-      background: linear-gradient(135deg, #0f766e, #155e75);
+      background: linear-gradient(135deg, rgb(65, 143, 222), rgb(54, 120, 188));
       color: #fff;
     }
     .header h1 { margin: 0; font-size: 24px; line-height: 1.3; }
@@ -56,7 +56,7 @@
       gap: 10px;
       align-items: center;
     }
-    .option:hover { border-color: #5eead4; background: #f0fdfa; }
+    .option:hover { border-color: rgb(65, 143, 222); background: #eef5fd; }
     .option input { margin: 0; }
     button {
       border: 0;
@@ -92,7 +92,7 @@
   <main class="card">
     <div class="header">
       <h1>归期知识问卷</h1>
-      <p>规则：共 10 题，答错即结束；第1题为问答题，第6题为多选题，其余为单选题。</p>
+      <p>规则：共 10 题，答错即结束；第1题为问答题，第6题为多选题，其余为单选题。可重复答题。</p>
     </div>
 
     <div class="content" id="quizView">
@@ -107,6 +107,9 @@
         <h2>答题结束</h2>
         <p id="failText"></p>
       </div>
+      <div style="margin-top: 14px;">
+        <button id="restartFromFail" type="button">重新开始</button>
+      </div>
     </div>
 
     <div class="content hidden" id="successView">
@@ -115,12 +118,13 @@
         <p>请扫码加入群聊：</p>
         <img class="qr" src="assets/group-qr.png" alt="群聊二维码" />
       </div>
+      <div style="margin-top: 14px;">
+        <button id="restartFromSuccess" type="button">再答一次</button>
+      </div>
     </div>
   </main>
 
   <script>
-    const STORAGE_KEY = "guiqi_quiz_session_v3";
-
     const questions = [
       {
         type: "text",
@@ -149,7 +153,7 @@
       {
         type: "single",
         title: "5. 归期喜欢小动物吗？",
-        options: ["不喜欢", "喜欢", "一般", "不确定"],
+        options: ["不喜欢", "喜欢", "一般", "偶尔喜欢"],
         correct: "不喜欢"
       },
       {
@@ -161,8 +165,8 @@
       {
         type: "single",
         title: "7. 归期登场 KPL 后的第一个冠军是哪一年的什么比赛？",
-        options: ["2023年王者荣耀挑战者杯（2023挑杯）", "2023年KPL春季赛", "2024年王者荣耀挑战者杯", "2022年世界冠军杯"],
-        correct: "2023年王者荣耀挑战者杯（2023挑杯）"
+        options: ["2023年王者荣耀挑战者杯", "2023年KPL春季赛", "2024年王者荣耀挑战者杯", "2022年世界冠军杯"],
+        correct: "2023年王者荣耀挑战者杯"
       },
       {
         type: "single",
@@ -187,34 +191,9 @@
     const defaultState = {
       index: 0,
       status: "in_progress", // in_progress | failed | passed
-      failedAt: null,
-      updatedAt: Date.now()
+      failedAt: null
     };
-
-    function readState() {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return { ...defaultState };
-        const parsed = JSON.parse(raw);
-        if (!parsed || typeof parsed !== "object") return { ...defaultState };
-        if (!["in_progress", "failed", "passed"].includes(parsed.status)) return { ...defaultState };
-        if (typeof parsed.index !== "number") return { ...defaultState };
-        return {
-          ...defaultState,
-          ...parsed,
-          index: Math.max(0, Math.min(parsed.index, questions.length))
-        };
-      } catch {
-        return { ...defaultState };
-      }
-    }
-
-    function writeState() {
-      state.updatedAt = Date.now();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    }
-
-    let state = readState();
+    let state = { ...defaultState };
 
     const quizView = document.getElementById("quizView");
     const failView = document.getElementById("failView");
@@ -224,6 +203,8 @@
     const optionForm = document.getElementById("optionForm");
     const submitBtn = document.getElementById("submitBtn");
     const failText = document.getElementById("failText");
+    const restartFromFail = document.getElementById("restartFromFail");
+    const restartFromSuccess = document.getElementById("restartFromSuccess");
 
     function showOnly(view) {
       [quizView, failView, successView].forEach(v => v.classList.add("hidden"));
@@ -316,7 +297,7 @@
     function renderByState() {
       if (state.status === "failed") {
         const failAt = (state.failedAt || 0) + 1;
-        failText.textContent = `你在第 ${failAt} 题选择错误，本次问卷已锁定结束。`;
+        failText.textContent = `你在第 ${failAt} 题选择错误，本轮答题已结束。`;
         showOnly(failView);
         return;
       }
@@ -328,7 +309,6 @@
 
       if (state.index >= questions.length) {
         state.status = "passed";
-        writeState();
         showOnly(successView);
         return;
       }
@@ -350,7 +330,6 @@
       if (!isCorrectAnswer(current, answer)) {
         state.status = "failed";
         state.failedAt = state.index;
-        writeState();
         renderByState();
         return;
       }
@@ -359,16 +338,16 @@
       if (state.index >= questions.length) {
         state.status = "passed";
       }
-      writeState();
       renderByState();
     });
 
-    // Prevent browser back from leaving/replaying the page flow.
-    history.pushState({ quiz: true }, "", location.href);
-    window.addEventListener("popstate", () => {
-      history.pushState({ quiz: true }, "", location.href);
-      alert("问卷进行中，已禁用回退。");
-    });
+    function restartQuiz() {
+      state = { ...defaultState };
+      renderByState();
+    }
+
+    restartFromFail.addEventListener("click", restartQuiz);
+    restartFromSuccess.addEventListener("click", restartQuiz);
 
     renderByState();
   </script>
