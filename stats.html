@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>问卷统计后台</title>
+  <style>
+    :root {
+      --primary: rgb(65, 143, 222);
+      --bg: #f4f7fc;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --ok: #166534;
+      --bad: #b91c1c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background: radial-gradient(circle at top, #eaf3ff 0%, var(--bg) 46%);
+      color: var(--text);
+      padding: 18px;
+    }
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .topbar {
+      background: linear-gradient(135deg, var(--primary), rgb(54, 120, 188));
+      color: #fff;
+      border-radius: 14px;
+      padding: 16px 18px;
+      margin-bottom: 14px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+    .title {
+      font-size: 20px;
+      font-weight: 700;
+      margin: 0;
+    }
+    .sub {
+      font-size: 13px;
+      opacity: 0.95;
+      margin: 4px 0 0;
+    }
+    .btn {
+      border: 0;
+      border-radius: 10px;
+      background: #fff;
+      color: var(--primary);
+      font-weight: 700;
+      padding: 9px 14px;
+      cursor: pointer;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .k {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .v {
+      font-size: 28px;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .ok { color: var(--ok); }
+    .bad { color: var(--bad); }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .panel-head {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .panel-title {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .hint {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .table-wrap {
+      overflow-x: auto;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      min-width: 760px;
+    }
+    th, td {
+      border-bottom: 1px solid var(--border);
+      padding: 10px 12px;
+      text-align: left;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    th {
+      background: #fafbff;
+      color: #374151;
+    }
+    .status-pill {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-weight: 700;
+      font-size: 12px;
+      border: 1px solid transparent;
+    }
+    .status-passed {
+      color: #14532d;
+      background: #dcfce7;
+      border-color: #86efac;
+    }
+    .status-failed {
+      color: #7f1d1d;
+      background: #fee2e2;
+      border-color: #fca5a5;
+    }
+    .msg {
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .error {
+      color: #991b1b;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-top: 10px;
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div>
+        <h1 class="title">问卷统计后台</h1>
+        <p class="sub">统计口径：一次答题结束（失败/通过）记为 1 次提交。</p>
+      </div>
+      <button class="btn" id="refreshBtn" type="button">刷新数据</button>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="k">提交人数</div>
+        <div class="v" id="submitCount">-</div>
+      </div>
+      <div class="card">
+        <div class="k">通过人数</div>
+        <div class="v ok" id="passCount">-</div>
+      </div>
+      <div class="card">
+        <div class="k">失败人数</div>
+        <div class="v bad" id="failCount">-</div>
+      </div>
+      <div class="card">
+        <div class="k">通过率</div>
+        <div class="v" id="passRate">-</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2 class="panel-title">最近提交记录</h2>
+        <span class="hint" id="lastUpdate">未加载</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>提交时间</th>
+              <th>状态</th>
+              <th>失败题号</th>
+              <th>总题数</th>
+              <th>尝试 ID</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="msg" id="msg">点击“刷新数据”开始加载。</div>
+    <div class="error" id="errorBox" hidden></div>
+  </div>
+
+  <script>
+    const REPORT_CONFIG = {
+      supabaseUrl: "https://lyshxirumphjmjclpewg.supabase.co",
+      supabaseAnonKey: "sb_publishable_cuDqdKojJQokMdZULIvgeA_mXLhLDky",
+      table: "quiz_submissions"
+    };
+
+    const submitCountEl = document.getElementById("submitCount");
+    const passCountEl = document.getElementById("passCount");
+    const failCountEl = document.getElementById("failCount");
+    const passRateEl = document.getElementById("passRate");
+    const rowsEl = document.getElementById("rows");
+    const msgEl = document.getElementById("msg");
+    const errorBox = document.getElementById("errorBox");
+    const lastUpdateEl = document.getElementById("lastUpdate");
+    const refreshBtn = document.getElementById("refreshBtn");
+
+    function baseHeaders() {
+      return {
+        "apikey": REPORT_CONFIG.supabaseAnonKey,
+        "Authorization": `Bearer ${REPORT_CONFIG.supabaseAnonKey}`
+      };
+    }
+
+    function buildUrl(pathAndQuery) {
+      return `${REPORT_CONFIG.supabaseUrl.replace(/\/$/, "")}/rest/v1/${pathAndQuery}`;
+    }
+
+    async function getCount(query) {
+      const url = buildUrl(`${REPORT_CONFIG.table}?select=id&${query}`);
+      const res = await fetch(url, {
+        method: "HEAD",
+        headers: {
+          ...baseHeaders(),
+          "Prefer": "count=exact"
+        }
+      });
+      if (!res.ok) {
+        throw new Error(`计数请求失败（${res.status}）`);
+      }
+      const countHeader = res.headers.get("content-range");
+      if (!countHeader || !countHeader.includes("/")) return 0;
+      const total = countHeader.split("/")[1];
+      return Number(total || 0);
+    }
+
+    async function getRecentRows(limit = 50) {
+      const url = buildUrl(
+        `${REPORT_CONFIG.table}?select=attempt_id,status,failed_at,question_total,submitted_at&order=submitted_at.desc&limit=${limit}`
+      );
+      const res = await fetch(url, {
+        headers: {
+          ...baseHeaders()
+        }
+      });
+      if (!res.ok) {
+        throw new Error(`记录请求失败（${res.status}）`);
+      }
+      return res.json();
+    }
+
+    function safeText(value) {
+      return value == null ? "-" : String(value);
+    }
+
+    function fmtTime(iso) {
+      if (!iso) return "-";
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return "-";
+      return d.toLocaleString("zh-CN", { hour12: false });
+    }
+
+    function setLoading(loading) {
+      refreshBtn.disabled = loading;
+      refreshBtn.textContent = loading ? "加载中..." : "刷新数据";
+    }
+
+    function showError(text) {
+      errorBox.hidden = false;
+      errorBox.textContent = text;
+    }
+
+    function clearError() {
+      errorBox.hidden = true;
+      errorBox.textContent = "";
+    }
+
+    function renderRows(rows) {
+      rowsEl.innerHTML = "";
+      if (!rows.length) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td colspan="5">暂无记录</td>`;
+        rowsEl.appendChild(tr);
+        return;
+      }
+
+      rows.forEach((r) => {
+        const tr = document.createElement("tr");
+        const statusClass = r.status === "passed" ? "status-passed" : "status-failed";
+        const statusText = r.status === "passed" ? "通过" : "失败";
+        tr.innerHTML = `
+          <td>${fmtTime(r.submitted_at)}</td>
+          <td><span class="status-pill ${statusClass}">${statusText}</span></td>
+          <td>${safeText(r.failed_at)}</td>
+          <td>${safeText(r.question_total)}</td>
+          <td>${safeText(r.attempt_id)}</td>
+        `;
+        rowsEl.appendChild(tr);
+      });
+    }
+
+    async function loadStats() {
+      setLoading(true);
+      clearError();
+      msgEl.textContent = "正在加载数据...";
+      try {
+        const [submitCount, passCount, failCount, rows] = await Promise.all([
+          getCount(""),
+          getCount("status=eq.passed"),
+          getCount("status=eq.failed"),
+          getRecentRows(50)
+        ]);
+
+        submitCountEl.textContent = String(submitCount);
+        passCountEl.textContent = String(passCount);
+        failCountEl.textContent = String(failCount);
+        const rate = submitCount ? ((passCount / submitCount) * 100).toFixed(2) : "0.00";
+        passRateEl.textContent = `${rate}%`;
+        renderRows(rows);
+        lastUpdateEl.textContent = `最后更新：${new Date().toLocaleString("zh-CN", { hour12: false })}`;
+        msgEl.textContent = `加载完成，共 ${submitCount} 条提交记录。`;
+      } catch (err) {
+        msgEl.textContent = "加载失败。";
+        showError(
+          `读取统计失败：${err.message}\n\n如果是 401/403，请在 Supabase 为表 quiz_submissions 添加 SELECT 策略：\n\ncreate policy "anon_select_quiz_submissions"\non public.quiz_submissions\nfor select\nto anon\nusing (true);`
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    refreshBtn.addEventListener("click", loadStats);
+    loadStats();
+  </script>
+</body>
+</html>
