@@ -120,6 +120,15 @@
 
   <script>
     const STORAGE_KEY = "guiqi_quiz_session_locked_v1";
+    const REPORT_CONFIG = {
+      // Example:
+      // supabaseUrl: "https://xxxx.supabase.co",
+      // supabaseAnonKey: "eyJ...",
+      // table: "quiz_submissions"
+      supabaseUrl: "https://lyshxirumphjmjclpewg.supabase.co",
+      supabaseAnonKey: "sb_publishable_cuDqdKojJQokMdZULIvgeA_mXLhLDky",
+      table: "quiz_submissions"
+    };
 
     const questions = [
       {
@@ -187,8 +196,17 @@
     const defaultState = {
       index: 0,
       status: "in_progress", // in_progress | failed | passed
-      failedAt: null
+      failedAt: null,
+      attemptId: "",
+      reported: false
     };
+
+    function newAttemptId() {
+      if (window.crypto && typeof window.crypto.randomUUID === "function") {
+        return window.crypto.randomUUID();
+      }
+      return `attempt_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    }
 
     function readState() {
       try {
@@ -201,7 +219,9 @@
         return {
           ...defaultState,
           ...parsed,
-          index: Math.max(0, Math.min(parsed.index, questions.length))
+          index: Math.max(0, Math.min(parsed.index, questions.length)),
+          attemptId: parsed.attemptId || newAttemptId(),
+          reported: Boolean(parsed.reported)
         };
       } catch {
         return { ...defaultState };
@@ -213,6 +233,11 @@
     }
 
     let state = readState();
+    if (!state.attemptId) {
+      state.attemptId = newAttemptId();
+      writeState();
+    }
+    let reportInFlight = false;
 
     const quizView = document.getElementById("quizView");
     const failView = document.getElementById("failView");
@@ -311,16 +336,59 @@
       return answer === q.correct;
     }
 
+    async function reportSubmissionIfNeeded() {
+      if (state.status !== "failed" && state.status !== "passed") return;
+      if (state.reported || reportInFlight) return;
+      if (!REPORT_CONFIG.supabaseUrl || !REPORT_CONFIG.supabaseAnonKey) return;
+
+      reportInFlight = true;
+      try {
+        const endpoint = `${REPORT_CONFIG.supabaseUrl.replace(/\/$/, "")}/rest/v1/${REPORT_CONFIG.table}`;
+        const payload = {
+          attempt_id: state.attemptId,
+          status: state.status,
+          failed_at: state.status === "failed" ? state.failedAt + 1 : null,
+          question_total: questions.length,
+          user_agent: navigator.userAgent || "",
+          submitted_at: new Date().toISOString()
+        };
+
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": REPORT_CONFIG.supabaseAnonKey,
+            "Authorization": `Bearer ${REPORT_CONFIG.supabaseAnonKey}`,
+            "Prefer": "return=minimal"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          throw new Error(`report failed: ${res.status}`);
+        }
+
+        state.reported = true;
+        writeState();
+      } catch (err) {
+        console.error("Submission report error:", err);
+      } finally {
+        reportInFlight = false;
+      }
+    }
+
     function renderByState() {
       if (state.status === "failed") {
         const failAt = (state.failedAt || 0) + 1;
         failText.textContent = `你在第 ${failAt} 题选择错误，本轮答题已结束。`;
         showOnly(failView);
+        reportSubmissionIfNeeded();
         return;
       }
 
       if (state.status === "passed") {
         showOnly(successView);
+        reportSubmissionIfNeeded();
         return;
       }
 
